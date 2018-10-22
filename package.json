@@ -1,0 +1,8 @@
+{
+  "name": "taptrust-voucher-protocol",
+  "private": true,
+  "version": "0.0.1",
+  "dependencies": {
+    "web3-eth-abi": "1.0.0-beta.36"
+  }
+}
