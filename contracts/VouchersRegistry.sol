@@ -8,17 +8,17 @@ contract VouchersRegistry is Ownable{
     string constant SAFETY_CHECK_PASSED = "safetyCheckPassed";
     string constant SAFETY_CHECK_FAILED = "safetyCheckFailed";
     
-    mapping(address => uint) safetyCheckPassedContracts;
-    mapping(address => uint) safetyCheckFailedContracts;
+    mapping(address => uint) public safetyCheckPassedContracts;
+    mapping(address => uint) public safetyCheckFailedContracts;
     
-    mapping(bytes32 => uint) contractVouchersDonorBalance;
-    mapping(bytes32 => uint) contractVouchersAddressRedeemed;
-    mapping(bytes32 => uint) contractVouchersRedeemablePerUser;
+    mapping(bytes32 => uint) public contractVouchersDonorBalance;
+    mapping(bytes32 => uint) public contractVouchersAddressRedeemed;
+    mapping(bytes32 => uint) public contractVouchersRedeemablePerUser;
     
-    mapping(address => uint) addressIdentityVerified;
+    mapping(address => uint) public addressIdentityVerified;
     
-    uint refundGasFee = 0;
-    mapping(address => uint) pendingRefunds;
+    //uint refundGasFee = 0;
+    //mapping(address => uint) public pendingRefunds;
     
     function setContractStatus(address contractAddress, string status, uint checkVersion) public onlyOwner {
         require(checkVersion > 0);
@@ -48,7 +48,10 @@ contract VouchersRegistry is Ownable{
     event AddressNotPassedSafetyCheckRefund(address refundee, uint refundAmount);
     
     function addContractVouchers(address contractAddress, uint redeemablePerUser) public payable {
-        if(safetyCheckPassedContracts[contractAddress] == 0) {
+        
+		
+		/*
+		if(safetyCheckPassedContracts[contractAddress] == 0) {
             uint refundAmount = 0;
             
             if(msg.value > refundGasFee) {
@@ -59,6 +62,11 @@ contract VouchersRegistry is Ownable{
             emit AddressNotPassedSafetyCheckRefund(msg.sender, refundAmount);
             return;
         }
+		*/
+		
+		//Commented out functionality is un-needed if we revert here, as it will automatically return ether to the sending account.
+		//No gas fee deduction should be needed for this function, as it is directly called by the sending account, and is not proxy-called by the admin.
+		require(safetyCheckPassedContracts[contractAddress] > 0);
         
         address donorAddress = msg.sender;
         bytes32 voucherKey = keccak256(abi.encodePacked(donorAddress, contractAddress));
@@ -69,11 +77,11 @@ contract VouchersRegistry is Ownable{
         contractVouchersRedeemablePerUser[voucherKey] = redeemablePerUser;
     }
     
-    function claimRefundedEther() public {
+    /*function claimRefundedEther() public {
         uint amount = pendingRefunds[msg.sender];
         pendingRefunds[msg.sender] = 0;
         msg.sender.transfer(amount);
-    }
+    }*/
     
     function withdrawContractVouchers(address contractAddress, uint withdrawAmount) public {
         address donorAddress = msg.sender;
