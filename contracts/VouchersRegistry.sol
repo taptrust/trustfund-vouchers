@@ -2,6 +2,7 @@ pragma solidity ^0.4.24;
 
 import './openzeppelin-solidity/contracts/ownership/Ownable.sol';
 import './openzeppelin-solidity/contracts/math/SafeMath.sol';
+import './VouchersUser.sol';
 
 contract VouchersRegistry is Ownable{
     
@@ -17,8 +18,7 @@ contract VouchersRegistry is Ownable{
     
     mapping(address => uint) public addressIdentityVerified;
     
-    //uint refundGasFee = 0;
-    //mapping(address => uint) public pendingRefunds;
+    uint redemptionGasFee = 1000000;
     
     function setContractStatus(address contractAddress, string status, uint checkVersion) public onlyOwner {
         require(checkVersion > 0);
@@ -40,6 +40,10 @@ contract VouchersRegistry is Ownable{
         if(safetyCheckPassedContracts[contractAddress] != 0)
             safetyCheckPassedContracts[contractAddress] = 0;
     }
+	
+	function setAddressIdentityVerified(address userAddress, uint verificationToken) public onlyOwner {
+		addressIdentityVerified[userAddress] = verificationToken;
+	}
     
     function stringsEquivelant (string a, string b) internal pure returns (bool){
        return keccak256(bytes(a)) == keccak256(bytes(b));
@@ -48,25 +52,7 @@ contract VouchersRegistry is Ownable{
     event AddressNotPassedSafetyCheckRefund(address refundee, uint refundAmount);
     
     function addContractVouchers(address contractAddress, uint redeemablePerUser) public payable {
-        
-		
-		/*
-		if(safetyCheckPassedContracts[contractAddress] == 0) {
-            uint refundAmount = 0;
-            
-            if(msg.value > refundGasFee) {
-                refundAmount = SafeMath.sub(msg.value, refundGasFee);
-                pendingRefunds[msg.sender] += refundAmount;
-            }
-            
-            emit AddressNotPassedSafetyCheckRefund(msg.sender, refundAmount);
-            return;
-        }
-		*/
-		
-		//Commented out functionality is un-needed if we revert here, as it will automatically return ether to the sending account.
-		//No gas fee deduction should be needed for this function, as it is directly called by the sending account, and is not proxy-called by the admin.
-		require(safetyCheckPassedContracts[contractAddress] > 0);
+        require(safetyCheckPassedContracts[contractAddress] > 0);
         
         address donorAddress = msg.sender;
         bytes32 voucherKey = keccak256(abi.encodePacked(donorAddress, contractAddress));
@@ -76,12 +62,6 @@ contract VouchersRegistry is Ownable{
         
         contractVouchersRedeemablePerUser[voucherKey] = redeemablePerUser;
     }
-    
-    /*function claimRefundedEther() public {
-        uint amount = pendingRefunds[msg.sender];
-        pendingRefunds[msg.sender] = 0;
-        msg.sender.transfer(amount);
-    }*/
     
     function withdrawContractVouchers(address contractAddress, uint withdrawAmount) public {
         address donorAddress = msg.sender;
@@ -93,4 +73,25 @@ contract VouchersRegistry is Ownable{
         contractVouchersDonorBalance[voucherKey] = SafeMath.sub(currentBalance, withdrawAmount);
         msg.sender.transfer(withdrawAmount);
     }
+	
+	function redeemContractVouchers(address contractAddress, address donorAddress, uint redeemAmount) public {
+		VouchersUser userAddress = VouchersUser(msg.sender);
+		require(addressIdentityVerified[userAddress] > 0);
+		
+		uint gasCost = SafeMath.mul(redemptionGasFee, tx.gasprice);
+		uint requiredAmount = SafeMath.add(redeemAmount, gasCost);
+		
+		bytes32 voucherKey = keccak256(abi.encodePacked(donorAddress, contractAddress, userAddress));
+		uint donorBalance = contractVouchersDonorBalance[voucherKey];
+		require(donorBalance >= requiredAmount);
+		
+		bytes32 userKey = keccak256(abi.encodePacked(donorAddress, contractAddress));
+		uint totalRedemption = SafeMath.add(redeemAmount, contractVouchersAddressRedeemed[userKey]);
+		
+		require(totalRedemption <= contractVouchersRedeemablePerUser[voucherKey]);
+		contractVouchersAddressRedeemed[userKey] = totalRedemption;
+		contractVouchersDonorBalance[voucherKey] = SafeMath.sub(donorBalance,requiredAmount);
+		
+		userAddress.forwardRedeemedVouchers.value(redeemAmount)(contractAddress);
+	}
 }
