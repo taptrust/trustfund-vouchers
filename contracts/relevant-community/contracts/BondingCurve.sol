@@ -27,14 +27,14 @@ contract BondingCurve is ERC20, BancorFormula, Ownable {
     we might want to add an 'initialize' function that will allow
     the owner to send ether to the contract and mint a given amount of tokens
   */
-  uint32 public reserveRatio;
+  uint32 public reserveRatio = 500000;
 
   /*
     - Front-running attacks are currently mitigated by the following mechanisms:
     TODO - minimum return argument for each conversion provides a way to define a minimum/maximum price for the transaction
     - gas price limit prevents users from having control over the order of execution
   */
-  uint256 public gasPrice = 0 wei; // maximum gas price for bancor transactions
+  uint256 public gasPrice = 1 ether; // maximum gas price for bancor transactions
 
   /**
    * @dev default function
@@ -51,7 +51,7 @@ contract BondingCurve is ERC20, BancorFormula, Ownable {
    */
   function buy() validGasPrice public payable returns(bool) {
     require(msg.value > 0);
-    uint256 tokensToMint = calculatePurchaseReturn(totalSupply(), poolBalance, reserveRatio, msg.value);
+    uint256 tokensToMint = msg.value; //calculatePurchaseReturn(totalSupply(), poolBalance, reserveRatio, msg.value);
     _totalSupply = _totalSupply.add(tokensToMint);
     _balances[msg.sender] = _balances[msg.sender].add(tokensToMint);
     poolBalance = poolBalance.add(msg.value);

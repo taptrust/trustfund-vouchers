@@ -81,11 +81,11 @@ contract VouchersRegistry is Ownable{
 		uint gasCost = SafeMath.mul(redemptionGasFee, tx.gasprice);
 		uint requiredAmount = SafeMath.add(redeemAmount, gasCost);
 		
-		bytes32 voucherKey = keccak256(abi.encodePacked(donorAddress, contractAddress, userAddress));
+		bytes32 voucherKey = keccak256(abi.encodePacked(donorAddress, contractAddress));
 		uint donorBalance = contractVouchersDonorBalance[voucherKey];
 		require(donorBalance >= requiredAmount);
 		
-		bytes32 userKey = keccak256(abi.encodePacked(donorAddress, contractAddress));
+		bytes32 userKey = keccak256(abi.encodePacked(donorAddress, contractAddress, userAddress)); 
 		uint totalRedemption = SafeMath.add(redeemAmount, contractVouchersAddressRedeemed[userKey]);
 		
 		require(totalRedemption <= contractVouchersRedeemablePerUser[voucherKey]);
