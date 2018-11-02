@@ -85,6 +85,23 @@ contract('VouchersRegistry', function(accounts) {
 			await user.requestContractVouchers(safeContract, donorAccount, web3.toWei(1,'ether')/2);
 		}, "allowed redemption of greater than single user limit");
 	});
+	
+	it("should not have lingering state changes if insufficient gas is used for a transaction.", async() => {
+		var voucherKey = await instance.getVoucherKey(donorAccount,safeContract); 
+		var userKey = await instance.getUserKey(donorAccount, safeContract, user.address);
+		var priorVoucherBalance = await instance.contractVouchersDonorBalance(voucherKey);
+		var priorUserRedeemed = await instance.contractVouchersAddressRedeemed(userKey);
+		
+		await assertError(async() => {
+			await user.requestContractVouchers(safeContract, donorAccount, 1000000, {gas:75000});
+		}, "succeeded with insufficient gas?");
+		
+		var postVoucherBalance = await instance.contractVouchersDonorBalance(voucherKey);
+		var postUserRedeemed = await instance.contractVouchersAddressRedeemed(userKey);
+		
+		assert.deepEqual(priorVoucherBalance, postVoucherBalance, "voucher balance state changed");
+		assert.deepEqual(priorUserRedeemed, postUserRedeemed, "user redemption state changed");
+	});
 });
 
 var assertError = async(func, message) => {
