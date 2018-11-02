@@ -1,12 +1,19 @@
 var VouchersRegistry = artifacts.require("VouchersRegistry.sol");
+var VouchersUser = artifacts.require("VouchersUser.sol");
+var BondingCurve = artifacts.require("BondingCurve.sol");
+
+var safeContract = null;
+var unsafeContract = null;
+var donorAccount = null;
+var randomAccount = null;
+
+var instance = null;
+var user = null;
+var token = null;
 
 contract('VouchersRegistry', function(accounts) {
-	let safeAccount = accounts[1];
-	let unsafeAccount = accounts[2];
-	let donorAccount = accounts[3];
-	let randomAccount = accounts[4];
-	
-	let instance = null;
+	donorAccount = accounts[1];
+	randomAccount = accounts[2];
 		
 	it("should be owned by deploying account", async() => {
 		instance = await VouchersRegistry.deployed();
@@ -15,38 +22,69 @@ contract('VouchersRegistry', function(accounts) {
 	});
 	
 	it("should let owner set contract status of accounts", async() => {
-		await setupAccounts(instance, safeAccount, unsafeAccount);
+		token = await BondingCurve.new();
+		safeContract = token.address;
+		
+		let unsafeToken = await BondingCurve.new();
+		unsafeContract = unsafeToken.address;
+		
+		await setupAccounts(instance, safeContract, unsafeContract);
 	});
 	
 	it("should not let non-owners set contract status", async() => {
 		await assertError(async() => {
-			await instance.setContractStatus(safeAccount, "safetyCheckPassed", 1, {from:donorAccount});
+			await instance.setContractStatus(safeContract, "safetyCheckPassed", 1, {from:donorAccount});
 		}, "allowed non-owner to set status");
 	});
 	
 	it("should not allow donations to unsafe accounts", async() => {
-		await donateToUnsafeAccountWithRequire(instance, unsafeAccount, donorAccount);
+		await donateToUnsafeContractWithRequire(instance, unsafeContract, donorAccount);
 	});
 	
 	it("should allow donations to safe accounts, and allow them to be withdrawn by donor", async() => {
-		await donateToSafeAccountAndWithdrawBalance(instance, safeAccount, donorAccount, donorAccount);
+		await donateTosafeContractAndWithdrawBalance(instance, safeContract, donorAccount, donorAccount);
 	});
 	
 	it("should not allow donations to be withdrawn by non-donor", async() => {
 		await assertError(async() => {
-			await donateToSafeAccountAndWithdrawBalance(instance, safeAccount, donorAccount, randomAccount);
+			await donateTosafeContractAndWithdrawBalance(instance, safeContract, donorAccount, randomAccount);
 		}, "allowed non-downer to withdraw donations");
 	});
-	
-	//The following tests involve the removed refund functionality.
-	/*it("should allow refund to donors who add vouchers to failed and unknown accounts", async() => {
-		await donateToUnsafeAccountAndClaimRefund(instance, unsafeAccount, donorAccount);
-		await donateToUnsafeAccountAndClaimRefund(instance, randomAccount, donorAccount);
+
+	it("VoucherUser: should be owned by deploying account", async() => {
+		user = await VouchersUser.new(instance.address);
+
+		let isOwner = await user.isOwner.call();
+		assert.isTrue(isOwner, "deploying address wasn't owner");
+	});
+
+	it("should let owner set accounts as identity verified", async() => {
+		await instance.setAddressIdentityVerified(user.address, 1);
 	});
 	
-	it("should not refund donors who add vouchers to safe accounts", async() => {
-		await donateToSafeAccountAndClaimRefund(instance, safeAccount, donorAccount);
-	});*/
+	it("should not let non-owners set accounts as identity verified", async() => {
+		await assertError(async() => {
+			await instance.setAddressIdentityVerified(donorAccount, 1, {from:donorAccount});
+		}, "allowed non-owner to set id verified");
+	});
+	
+	it("should not allow non-verified user contracts to call redeemContractVouchers", async() => {
+		await assertError(async() => {
+			await instance.redeemContractVouchers(safeContract, donorAccount, 1, {from:randomAccount});
+		}, "allow non-verified user contracts to call redeemContractVouchers");
+	});
+
+	it("VoucherUser: owner should be able to initiate redemption request", async() => {
+		await user.requestContractVouchers(safeContract, donorAccount, 1000000);
+		var balance = await token._balances.call(user.address);
+		assert.isTrue(balance.toNumber() > 0, "Tokens not granted");
+	});
+	
+	it("VoucherUser: should not be able to redeem greater than amount allowed per user", async() => {
+		await assertError(async() => {
+			await user.requestContractVouchers(safeContract, donorAccount, web3.toWei(1,'ether')/2);
+		}, "allowed redemption of greater than single user limit");
+	});
 });
 
 var assertError = async(func, message) => {
@@ -66,27 +104,26 @@ var assertError = async(func, message) => {
 	return error;
 }	
 
-var setupAccounts = async(instance, safeAccount, unsafeAccount) => {
+var setupAccounts = async(instance, safeContract, unsafeContract) => {
 	
 	await assertError(async() => {
-		await instance.setContractStatus(safeAccount, "safetyCheckPassed", 0);
+		await instance.setContractStatus(safeContract, "safetyCheckPassed", 0);
 	}, "allowed checkVersion of 0");
 	
-	await instance.setContractStatus(safeAccount, "safetyCheckPassed", 1);
-	await instance.setContractStatus(unsafeAccount, "safetyCheckFailed", 1);
+	await instance.setContractStatus(safeContract, "safetyCheckPassed", 1);
+	await instance.setContractStatus(unsafeContract, "safetyCheckFailed", 1);
 };
 
 var donateToAccount = async(instance, beneficiaryAccount, donorAccount, amount) => {
-	
-	await instance.addContractVouchers(beneficiaryAccount, 1, {value: amount, from:donorAccount});
+	await instance.addContractVouchers(beneficiaryAccount, amount/2, {value: amount, from:donorAccount});
 }
 
-var donateToUnsafeAccountWithRequire = async(instance, unsafeAccount, donorAccount) => {
+var donateToUnsafeContractWithRequire = async(instance, unsafeContract, donorAccount) => {
 	let ether = web3.toWei(1,'ether');
 	let balance1 = web3.eth.getBalance(donorAccount);
 	
 	let receipt = await assertError(async() => {
-			await instance.setContractStatus(unsafeAccount, "safetyCheckPassed", ether, {from:donorAccount});
+			await instance.setContractStatus(unsafeContract, "safetyCheckPassed", ether, {from:donorAccount});
 		}, "allowed donation to unsafe account");
 	
 	let balance2 = web3.eth.getBalance(donorAccount);
@@ -95,10 +132,10 @@ var donateToUnsafeAccountWithRequire = async(instance, unsafeAccount, donorAccou
 	assert.isTrue(balance1.sub(balance2).toNumber() < ether, "value sent was not refunded");
 }
 
-var donateToUnsafeAccountAndClaimRefund = async(instance, unsafeAccount, donorAccount) => {
+var donateToUnsafeContractAndClaimRefund = async(instance, unsafeContract, donorAccount) => {
 	let ether = web3.toWei(1,'ether');
 	
-	await donateToAccount(instance, unsafeAccount, donorAccount, ether);
+	await donateToAccount(instance, unsafeContract, donorAccount, ether);
 	let balance1 = web3.eth.getBalance(donorAccount);
 	
 	let receipt = await instance.claimRefundedEther({from:donorAccount});
@@ -112,10 +149,10 @@ var donateToUnsafeAccountAndClaimRefund = async(instance, unsafeAccount, donorAc
 	assert.deepEqual(balance1.add(ether).sub(totalCost), balance2);
 };
 
-var donateToSafeAccountAndClaimRefund = async(instance, safeAccount, donorAccount) => {
+var donateTosafeContractAndClaimRefund = async(instance, safeContract, donorAccount) => {
 	let ether = web3.toWei(1,'ether');
 	
-	await donateToAccount(instance, safeAccount, donorAccount, ether);
+	await donateToAccount(instance, safeContract, donorAccount, ether);
 	let balance1 = web3.eth.getBalance(donorAccount);
 	
 	let receipt = await instance.claimRefundedEther({from:donorAccount});
@@ -127,16 +164,18 @@ var donateToSafeAccountAndClaimRefund = async(instance, safeAccount, donorAccoun
 	let balance2 = web3.eth.getBalance(donorAccount);
 	
 	assert.deepEqual(balance1.sub(totalCost), balance2);
+	
+	await donateToAccount(instance, safeContract, donorAccount, ether);
 };
 
-var donateToSafeAccountAndWithdrawBalance = async(instance, safeAccount, donorAccount, withdrawingAccount, amount) => {
+var donateTosafeContractAndWithdrawBalance = async(instance, safeContract, donorAccount, withdrawingAccount, amount) => {
 	let ether = web3.toWei(1,'ether');
 	
-	await donateToAccount(instance, safeAccount, donorAccount, ether);
+	await donateToAccount(instance, safeContract, donorAccount, ether);
 	
 	let balance1 = web3.eth.getBalance(donorAccount);
 	
-	let receipt = await instance.withdrawContractVouchers(safeAccount, ether, {from:withdrawingAccount});
+	let receipt = await instance.withdrawContractVouchers(safeContract, ether, {from:withdrawingAccount});
 	const gasUsed = receipt.receipt.gasUsed;
 	
 	const tx = await web3.eth.getTransaction(receipt.tx);
