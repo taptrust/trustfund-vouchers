@@ -55,7 +55,7 @@ contract VouchersRegistry is Ownable{
         require(safetyCheckPassedContracts[contractAddress] > 0);
         
         address donorAddress = msg.sender;
-        bytes32 voucherKey = keccak256(abi.encodePacked(donorAddress, contractAddress));
+        bytes32 voucherKey = getVoucherKey(donorAddress, contractAddress);
         
         uint currentBalance = contractVouchersDonorBalance[voucherKey];
         contractVouchersDonorBalance[voucherKey] = SafeMath.add(currentBalance, msg.value);
@@ -65,7 +65,7 @@ contract VouchersRegistry is Ownable{
     
     function withdrawContractVouchers(address contractAddress, uint withdrawAmount) public {
         address donorAddress = msg.sender;
-        bytes32 voucherKey = keccak256(abi.encodePacked(donorAddress, contractAddress));
+        bytes32 voucherKey = getVoucherKey(donorAddress, contractAddress);
         uint currentBalance = contractVouchersDonorBalance[voucherKey];
         
         require(currentBalance >= withdrawAmount && withdrawAmount > 0);
@@ -81,11 +81,11 @@ contract VouchersRegistry is Ownable{
 		uint gasCost = SafeMath.mul(redemptionGasFee, tx.gasprice);
 		uint requiredAmount = SafeMath.add(redeemAmount, gasCost);
 		
-		bytes32 voucherKey = keccak256(abi.encodePacked(donorAddress, contractAddress));
+		bytes32 voucherKey = getVoucherKey(donorAddress, contractAddress);
 		uint donorBalance = contractVouchersDonorBalance[voucherKey];
 		require(donorBalance >= requiredAmount);
 		
-		bytes32 userKey = keccak256(abi.encodePacked(donorAddress, contractAddress, userAddress)); 
+		bytes32 userKey = getUserKey(donorAddress, contractAddress, userAddress); 
 		uint totalRedemption = SafeMath.add(redeemAmount, contractVouchersAddressRedeemed[userKey]);
 		
 		require(totalRedemption <= contractVouchersRedeemablePerUser[voucherKey]);
@@ -94,4 +94,12 @@ contract VouchersRegistry is Ownable{
 		
 		userAddress.forwardRedeemedVouchers.value(redeemAmount)(contractAddress);
 	}
+	
+	function getVoucherKey(address donorAddress, address contractAddress) public pure returns(bytes32) {
+		return keccak256(abi.encodePacked(donorAddress, contractAddress));
+	}
+
+	function getUserKey(address donorAddress, address contractAddress, address userAddress) public pure returns(bytes32) {
+		return keccak256(abi.encodePacked(donorAddress, contractAddress, userAddress));
+	}		
 }

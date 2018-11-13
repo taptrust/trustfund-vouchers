@@ -11,6 +11,8 @@ var instance = null;
 var user = null;
 var token = null;
 
+var ether = web3.toWei(1,'ether');
+
 contract('VouchersRegistry', function(accounts) {
 	donorAccount = accounts[1];
 	randomAccount = accounts[2];
@@ -50,6 +52,25 @@ contract('VouchersRegistry', function(accounts) {
 			await donateTosafeContractAndWithdrawBalance(instance, safeContract, donorAccount, randomAccount);
 		}, "allowed non-downer to withdraw donations");
 	});
+	
+	it("should not allow withdrawal of greater than donated amount", async() => {
+		await donateToAccount(instance, safeContract, randomAccount, ether);
+		
+		await assertError(async() => {
+			await instance.withdrawContractVouchers(safeContract, ether*2, {from:donorAccount});
+		}, "no error from withdrawal of greater than donated.");
+	});
+	
+	it("is possible to donate vouchers to update an existing voucher balance", async() => {
+		var voucherKey = await instance.getVoucherKey(donorAccount,safeContract); 
+		var priorVoucherBalance = await instance.contractVouchersDonorBalance(voucherKey);
+		
+		await donateToAccount(instance, safeContract, donorAccount, ether);
+		
+		var postVoucherBalance = await instance.contractVouchersDonorBalance(voucherKey);
+		
+		assert.isTrue(priorVoucherBalance.toString(10) != postVoucherBalance.toString(10), "voucher balance state not changed");
+	});
 
 	it("VoucherUser: should be owned by deploying account", async() => {
 		user = await VouchersUser.new(instance.address);
@@ -75,15 +96,61 @@ contract('VouchersRegistry', function(accounts) {
 	});
 
 	it("VoucherUser: owner should be able to initiate redemption request", async() => {
-		await user.requestContractVouchers(safeContract, donorAccount, 1000000);
+		await user.requestContractVouchers(safeContract, donorAccount, ether/4);
+		var balance = await token._balances.call(user.address);
+		assert.isTrue(balance.toNumber() > 0, "Tokens not granted");
+	});
+	
+	it("VoucherUser: non-owner should not be able to initiate redemption request", async() => {
+		await assertError(async() => {
+			await user.requestContractVouchers(safeContract, donorAccount, ether/4, {from:randomAccount});
+		}, "allowed non-owner to initiate redemption request");
+	});
+	
+	it("VoucherUser: owner should be able to initiate redemption request for remaining allotment", async() => {
+		await user.requestContractVouchers(safeContract, donorAccount, ether/4);
 		var balance = await token._balances.call(user.address);
 		assert.isTrue(balance.toNumber() > 0, "Tokens not granted");
 	});
 	
 	it("VoucherUser: should not be able to redeem greater than amount allowed per user", async() => {
 		await assertError(async() => {
-			await user.requestContractVouchers(safeContract, donorAccount, web3.toWei(1,'ether')/2);
+			await user.requestContractVouchers(safeContract, donorAccount, ether/4);
 		}, "allowed redemption of greater than single user limit");
+	});
+	
+	it("should be possible to modify an redeemablePerUser setting without sending any additional ether", async() => {
+		var voucherKey = await instance.getVoucherKey(donorAccount,safeContract); 
+		var priorUserLimit = await instance.contractVouchersRedeemablePerUser(voucherKey);
+		
+		await instance.addContractVouchers(safeContract, ether, {value: 0, from:donorAccount});
+		
+		var postUserLimit = await instance.contractVouchersRedeemablePerUser(voucherKey);
+		
+		assert.isTrue(priorUserLimit.toString(10) != postUserLimit.toString(10), "voucher limit state not changed");
+	});
+	
+	it("VoucherUser: should not be able to redeem greater than available amount", async() => {
+		await assertError(async() => {
+			await user.requestContractVouchers(safeContract, donorAccount, ether);
+		}, "allowed redemption of greater than amount available");
+	});
+	
+	it("should not have lingering state changes if insufficient gas is used for a transaction.", async() => {
+		var voucherKey = await instance.getVoucherKey(donorAccount,safeContract); 
+		var userKey = await instance.getUserKey(donorAccount, safeContract, user.address);
+		var priorVoucherBalance = await instance.contractVouchersDonorBalance(voucherKey);
+		var priorUserRedeemed = await instance.contractVouchersAddressRedeemed(userKey);
+		
+		await assertError(async() => {
+			await user.requestContractVouchers(safeContract, donorAccount, 1000000, {gas:75000});
+		}, "succeeded with insufficient gas?");
+		
+		var postVoucherBalance = await instance.contractVouchersDonorBalance(voucherKey);
+		var postUserRedeemed = await instance.contractVouchersAddressRedeemed(userKey);
+		
+		assert.deepEqual(priorVoucherBalance, postVoucherBalance, "voucher balance state changed");
+		assert.deepEqual(priorUserRedeemed, postUserRedeemed, "user redemption state changed");
 	});
 });
 
@@ -119,7 +186,6 @@ var donateToAccount = async(instance, beneficiaryAccount, donorAccount, amount) 
 }
 
 var donateToUnsafeContractWithRequire = async(instance, unsafeContract, donorAccount) => {
-	let ether = web3.toWei(1,'ether');
 	let balance1 = web3.eth.getBalance(donorAccount);
 	
 	let receipt = await assertError(async() => {
@@ -132,45 +198,8 @@ var donateToUnsafeContractWithRequire = async(instance, unsafeContract, donorAcc
 	assert.isTrue(balance1.sub(balance2).toNumber() < ether, "value sent was not refunded");
 }
 
-var donateToUnsafeContractAndClaimRefund = async(instance, unsafeContract, donorAccount) => {
-	let ether = web3.toWei(1,'ether');
-	
-	await donateToAccount(instance, unsafeContract, donorAccount, ether);
-	let balance1 = web3.eth.getBalance(donorAccount);
-	
-	let receipt = await instance.claimRefundedEther({from:donorAccount});
-	const gasUsed = receipt.receipt.gasUsed;
-	
-	const tx = await web3.eth.getTransaction(receipt.tx);
-    const totalCost = tx.gasPrice.mul(gasUsed);
-	
-	let balance2 = web3.eth.getBalance(donorAccount);
-	
-	assert.deepEqual(balance1.add(ether).sub(totalCost), balance2);
-};
-
-var donateTosafeContractAndClaimRefund = async(instance, safeContract, donorAccount) => {
-	let ether = web3.toWei(1,'ether');
-	
-	await donateToAccount(instance, safeContract, donorAccount, ether);
-	let balance1 = web3.eth.getBalance(donorAccount);
-	
-	let receipt = await instance.claimRefundedEther({from:donorAccount});
-	const gasUsed = receipt.receipt.gasUsed;
-	
-	const tx = await web3.eth.getTransaction(receipt.tx);
-    const totalCost = tx.gasPrice.mul(gasUsed);
-	
-	let balance2 = web3.eth.getBalance(donorAccount);
-	
-	assert.deepEqual(balance1.sub(totalCost), balance2);
-	
-	await donateToAccount(instance, safeContract, donorAccount, ether);
-};
-
 var donateTosafeContractAndWithdrawBalance = async(instance, safeContract, donorAccount, withdrawingAccount, amount) => {
-	let ether = web3.toWei(1,'ether');
-	
+
 	await donateToAccount(instance, safeContract, donorAccount, ether);
 	
 	let balance1 = web3.eth.getBalance(donorAccount);
