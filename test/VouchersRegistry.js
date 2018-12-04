@@ -8,6 +8,7 @@ var donorAccount = null;
 var randomAccount = null;
 
 var instance = null;
+var bondingCurveInstance = null;
 var user = null;
 var token = null;
 
@@ -31,6 +32,8 @@ contract('VouchersRegistry', function(accounts) {
 		unsafeContract = unsafeToken.address;
 		
 		await setupAccounts(instance, safeContract, unsafeContract);
+
+		bondingCurveInstance = BondingCurve.at(safeContract);
 	});
 	
 	it("should not let non-owners set contract status", async() => {
@@ -91,31 +94,31 @@ contract('VouchersRegistry', function(accounts) {
 	
 	it("should not allow non-verified user contracts to call redeemContractVouchers", async() => {
 		await assertError(async() => {
-			await instance.redeemContractVouchers(safeContract, donorAccount, 1, {from:randomAccount});
+			await instance.redeemContractVouchers(safeContract, donorAccount, 1, generateContractCallData(), {from:randomAccount});
 		}, "allow non-verified user contracts to call redeemContractVouchers");
 	});
 
 	it("VoucherUser: owner should be able to initiate redemption request", async() => {
-		await user.requestContractVouchers(safeContract, donorAccount, ether/4);
+		await user.requestContractVouchers(safeContract, donorAccount, ether/4, generateContractCallData());
 		var balance = await token._balances.call(user.address);
 		assert.isTrue(balance.toNumber() > 0, "Tokens not granted");
 	});
 	
 	it("VoucherUser: non-owner should not be able to initiate redemption request", async() => {
 		await assertError(async() => {
-			await user.requestContractVouchers(safeContract, donorAccount, ether/4, {from:randomAccount});
+			await user.requestContractVouchers(safeContract, donorAccount, ether/4, generateContractCallData(), {from:randomAccount});
 		}, "allowed non-owner to initiate redemption request");
 	});
 	
 	it("VoucherUser: owner should be able to initiate redemption request for remaining allotment", async() => {
-		await user.requestContractVouchers(safeContract, donorAccount, ether/4);
+		await user.requestContractVouchers(safeContract, donorAccount, ether/4, generateContractCallData());
 		var balance = await token._balances.call(user.address);
 		assert.isTrue(balance.toNumber() > 0, "Tokens not granted");
 	});
 	
 	it("VoucherUser: should not be able to redeem greater than amount allowed per user", async() => {
 		await assertError(async() => {
-			await user.requestContractVouchers(safeContract, donorAccount, ether/4);
+			await user.requestContractVouchers(safeContract, donorAccount, ether/4, generateContractCallData());
 		}, "allowed redemption of greater than single user limit");
 	});
 	
@@ -132,7 +135,7 @@ contract('VouchersRegistry', function(accounts) {
 	
 	it("VoucherUser: should not be able to redeem greater than available amount", async() => {
 		await assertError(async() => {
-			await user.requestContractVouchers(safeContract, donorAccount, ether);
+			await user.requestContractVouchers(safeContract, donorAccount, ether, generateContractCallData());
 		}, "allowed redemption of greater than amount available");
 	});
 	
@@ -143,7 +146,7 @@ contract('VouchersRegistry', function(accounts) {
 		var priorUserRedeemed = await instance.contractVouchersAddressRedeemed(userKey);
 		
 		await assertError(async() => {
-			await user.requestContractVouchers(safeContract, donorAccount, 1000000, {gas:75000});
+			await user.requestContractVouchers(safeContract, donorAccount, 1000000, generateContractCallData(), {gas:75000});
 		}, "succeeded with insufficient gas?");
 		
 		var postVoucherBalance = await instance.contractVouchersDonorBalance(voucherKey);
@@ -214,3 +217,16 @@ var donateTosafeContractAndWithdrawBalance = async(instance, safeContract, donor
 	
 	assert.deepEqual(balance1.add(ether).sub(totalCost), balance2);
 };
+
+var generateContractCallData = () => {
+	//https://github.com/trufflesuite/truffle/issues/381#issuecomment-289218051
+	return bondingCurveInstance.buy.request().params[0].data;
+
+/*
+	return web3.eth.abi.encodeFunctionCall({
+    	name: 'buy',
+    	type: 'function',
+    	inputs: []
+	}, []); //For web3 1.0
+*/
+}
