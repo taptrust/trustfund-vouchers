@@ -74,7 +74,7 @@ contract VouchersRegistry is Ownable{
         msg.sender.transfer(withdrawAmount);
     }
 	
-	function redeemContractVouchers(address contractAddress, address donorAddress, uint redeemAmount) public {
+	function redeemContractVouchers(address contractAddress, address donorAddress, uint redeemAmount, bytes callData) public {
 		VouchersUser userAddress = VouchersUser(msg.sender);
 		require(addressIdentityVerified[userAddress] > 0);
 		
@@ -92,7 +92,7 @@ contract VouchersRegistry is Ownable{
 		contractVouchersAddressRedeemed[userKey] = totalRedemption;
 		contractVouchersDonorBalance[voucherKey] = SafeMath.sub(donorBalance,requiredAmount);
 		
-		userAddress.forwardRedeemedVouchers.value(redeemAmount)(contractAddress);
+		userAddress.forwardRedeemedVouchers.value(redeemAmount)(contractAddress, callData);
 	}
 	
 	function getVoucherKey(address donorAddress, address contractAddress) public pure returns(bytes32) {
