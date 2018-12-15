@@ -15,7 +15,7 @@ contract VouchersRegistry is Ownable{
     mapping(bytes32 => uint) public contractVouchersDonorBalance;
     mapping(bytes32 => uint) public contractVouchersAddressRedeemed;
     mapping(bytes32 => uint) public contractVouchersRedeemablePerUser;
-    mapping(bytes32 => uint) public contractVouchersFunctionData;
+    mapping(bytes32 => bytes32) public contractVouchersFunctionData;
     mapping(address => uint) public addressIdentityVerified;
     
     uint redemptionGasFee = 1000000;
@@ -94,7 +94,7 @@ contract VouchersRegistry is Ownable{
 		contractVouchersAddressRedeemed[userKey] = totalRedemption;
 		contractVouchersDonorBalance[voucherKey] = SafeMath.sub(donorBalance,requiredAmount);
 
-    if(contractVouchersFunctionData[voucherKey])
+    if(contractVouchersFunctionData[voucherKey] > 0)
         voucherFunctionData = contractVouchersFunctionData[voucherKey];
         		
 		userAddress.forwardRedeemedVouchers.value(redeemAmount)(contractAddress, voucherFunctionData);
