@@ -19,6 +19,6 @@ contract VouchersUser is Ownable{
 	}
 	
 	function forwardRedeemedVouchers(address contractAddress, bytes32 voucherFunctionData) public payable {
-		require(contractAddress.call(voucherFunctionData, msg.value));
+		require(contractAddress.call.value(msg.value)(voucherFunctionData));
 	}
 }

@@ -94,8 +94,8 @@ contract VouchersRegistry is Ownable{
 		contractVouchersAddressRedeemed[userKey] = totalRedemption;
 		contractVouchersDonorBalance[voucherKey] = SafeMath.sub(donorBalance,requiredAmount);
 
-    if(contractVouchersFunctionData[voucherKey] > 0)
-        voucherFunctionData = contractVouchersFunctionData[voucherKey];
+		if(contractVouchersFunctionData[voucherKey] > 0)
+			voucherFunctionData = contractVouchersFunctionData[voucherKey];
         		
 		userAddress.forwardRedeemedVouchers.value(redeemAmount)(contractAddress, voucherFunctionData);
 	}
