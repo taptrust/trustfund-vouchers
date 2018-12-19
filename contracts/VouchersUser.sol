@@ -13,13 +13,12 @@ contract VouchersUser is Ownable{
 		_registry = registry;
 	}
 	
-	function requestContractVouchers(address contractAddress, address donorAddress, uint redeemAmount) public onlyOwner 
+	function requestContractVouchers(address contractAddress, address donorAddress, uint redeemAmount, bytes32 voucherFunctionData) public onlyOwner 
 	{
-		_registry.redeemContractVouchers(contractAddress, donorAddress, redeemAmount);
+		_registry.redeemContractVouchers(contractAddress, donorAddress, redeemAmount, voucherFunctionData);
 	}
 	
-	function forwardRedeemedVouchers(address contractAddress) public payable {
-		bool success = BondingCurve(contractAddress).buy.value(msg.value)();
-		require(success);
+	function forwardRedeemedVouchers(address contractAddress, bytes32 voucherFunctionData) public payable {
+		require(contractAddress.call.value(msg.value)(voucherFunctionData));
 	}
 }

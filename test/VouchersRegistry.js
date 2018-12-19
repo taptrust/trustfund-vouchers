@@ -1,7 +1,7 @@
 var VouchersRegistry = artifacts.require("VouchersRegistry.sol");
 var VouchersUser = artifacts.require("VouchersUser.sol");
 var BondingCurve = artifacts.require("BondingCurve.sol");
-
+var Web3EthAbi = require('web3-eth-abi');
 var safeContract = null;
 var unsafeContract = null;
 var donorAccount = null;
@@ -11,7 +11,14 @@ var instance = null;
 var user = null;
 var token = null;
 
-var ether = web3.toWei(1,'ether');
+var ether = web3.toWei(1, 'ether');
+
+var encodedBuyCall = Web3EthAbi.encodeFunctionCall({
+    name: 'buy',
+    type: 'function',
+    inputs: []
+}, []);
+
 
 contract('VouchersRegistry', function(accounts) {
 	donorAccount = accounts[1];
@@ -91,24 +98,24 @@ contract('VouchersRegistry', function(accounts) {
 	
 	it("should not allow non-verified user contracts to call redeemContractVouchers", async() => {
 		await assertError(async() => {
-			await instance.redeemContractVouchers(safeContract, donorAccount, 1, {from:randomAccount});
+			await instance.redeemContractVouchers(safeContract, donorAccount, 1, encodedBuyCall, {from:randomAccount});
 		}, "allow non-verified user contracts to call redeemContractVouchers");
 	});
 
 	it("VoucherUser: owner should be able to initiate redemption request", async() => {
-		await user.requestContractVouchers(safeContract, donorAccount, ether/4);
+		await user.requestContractVouchers(safeContract, donorAccount, ether/4, encodedBuyCall);
 		var balance = await token._balances.call(user.address);
 		assert.isTrue(balance.toNumber() > 0, "Tokens not granted");
 	});
 	
 	it("VoucherUser: non-owner should not be able to initiate redemption request", async() => {
 		await assertError(async() => {
-			await user.requestContractVouchers(safeContract, donorAccount, ether/4, {from:randomAccount});
+			await user.requestContractVouchers(safeContract, donorAccount, ether/4, encodedBuyCall, {from:randomAccount});
 		}, "allowed non-owner to initiate redemption request");
 	});
 	
 	it("VoucherUser: owner should be able to initiate redemption request for remaining allotment", async() => {
-		await user.requestContractVouchers(safeContract, donorAccount, ether/4);
+		await user.requestContractVouchers(safeContract, donorAccount, encodedBuyCall, ether/4);
 		var balance = await token._balances.call(user.address);
 		assert.isTrue(balance.toNumber() > 0, "Tokens not granted");
 	});
@@ -123,7 +130,7 @@ contract('VouchersRegistry', function(accounts) {
 		var voucherKey = await instance.getVoucherKey(donorAccount,safeContract); 
 		var priorUserLimit = await instance.contractVouchersRedeemablePerUser(voucherKey);
 		
-		await instance.addContractVouchers(safeContract, ether, {value: 0, from:donorAccount});
+		await instance.addContractVouchers(safeContract, ether, encodedBuyCall, {value: 0, from:donorAccount});
 		
 		var postUserLimit = await instance.contractVouchersRedeemablePerUser(voucherKey);
 		
@@ -182,7 +189,7 @@ var setupAccounts = async(instance, safeContract, unsafeContract) => {
 };
 
 var donateToAccount = async(instance, beneficiaryAccount, donorAccount, amount) => {
-	await instance.addContractVouchers(beneficiaryAccount, amount/2, {value: amount, from:donorAccount});
+	await instance.addContractVouchers(beneficiaryAccount, amount/2, encodedBuyCall, {value: amount, from:donorAccount});
 }
 
 var donateToUnsafeContractWithRequire = async(instance, unsafeContract, donorAccount) => {

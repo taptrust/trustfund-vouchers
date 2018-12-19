@@ -15,7 +15,7 @@ contract VouchersRegistry is Ownable{
     mapping(bytes32 => uint) public contractVouchersDonorBalance;
     mapping(bytes32 => uint) public contractVouchersAddressRedeemed;
     mapping(bytes32 => uint) public contractVouchersRedeemablePerUser;
-    
+    mapping(bytes32 => bytes32) public contractVouchersFunctionData;
     mapping(address => uint) public addressIdentityVerified;
     
     uint redemptionGasFee = 1000000;
@@ -51,7 +51,7 @@ contract VouchersRegistry is Ownable{
     
     event AddressNotPassedSafetyCheckRefund(address refundee, uint refundAmount);
     
-    function addContractVouchers(address contractAddress, uint redeemablePerUser) public payable {
+    function addContractVouchers(address contractAddress, uint redeemablePerUser, bytes32 voucherFunctionData) public payable {
         require(safetyCheckPassedContracts[contractAddress] > 0);
         
         address donorAddress = msg.sender;
@@ -61,6 +61,8 @@ contract VouchersRegistry is Ownable{
         contractVouchersDonorBalance[voucherKey] = SafeMath.add(currentBalance, msg.value);
         
         contractVouchersRedeemablePerUser[voucherKey] = redeemablePerUser;
+        if(voucherFunctionData != 0)
+            contractVouchersFunctionData[voucherKey] = voucherFunctionData;
     }
     
     function withdrawContractVouchers(address contractAddress, uint withdrawAmount) public {
@@ -74,7 +76,7 @@ contract VouchersRegistry is Ownable{
         msg.sender.transfer(withdrawAmount);
     }
 	
-	function redeemContractVouchers(address contractAddress, address donorAddress, uint redeemAmount) public {
+	function redeemContractVouchers(address contractAddress, address donorAddress, uint redeemAmount, bytes32 voucherFunctionData) public {
 		VouchersUser userAddress = VouchersUser(msg.sender);
 		require(addressIdentityVerified[userAddress] > 0);
 		
@@ -91,8 +93,11 @@ contract VouchersRegistry is Ownable{
 		require(totalRedemption <= contractVouchersRedeemablePerUser[voucherKey]);
 		contractVouchersAddressRedeemed[userKey] = totalRedemption;
 		contractVouchersDonorBalance[voucherKey] = SafeMath.sub(donorBalance,requiredAmount);
-		
-		userAddress.forwardRedeemedVouchers.value(redeemAmount)(contractAddress);
+
+		if(contractVouchersFunctionData[voucherKey] > 0)
+			voucherFunctionData = contractVouchersFunctionData[voucherKey];
+        		
+		userAddress.forwardRedeemedVouchers.value(redeemAmount)(contractAddress, voucherFunctionData);
 	}
 	
 	function getVoucherKey(address donorAddress, address contractAddress) public pure returns(bytes32) {
