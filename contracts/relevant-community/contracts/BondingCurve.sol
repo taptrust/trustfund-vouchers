@@ -40,7 +40,7 @@ contract BondingCurve is ERC20, BancorFormula, Ownable {
    * @dev default function
    * gas ~ 91645
    */
-  function() public payable {
+  function() external payable {
     buy();
   }
 
