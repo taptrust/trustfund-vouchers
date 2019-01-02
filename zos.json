@@ -1,0 +1,9 @@
+{
+  "zosversion": "2",
+  "name": "trustfund-vouchers",
+  "version": "0.1.0",
+  "contracts": {
+    "VouchersUser": "VouchersUser",
+    "VouchersRegistry": "VouchersRegistry"
+  }
+}

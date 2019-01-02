@@ -1,3 +1,5 @@
+import { TestHelper } from 'zos';
+
 var VouchersRegistry = artifacts.require("VouchersRegistry.sol");
 var VouchersUser = artifacts.require("VouchersUser.sol");
 var BondingCurve = artifacts.require("BondingCurve.sol");
@@ -6,7 +8,9 @@ var safeContract = null;
 var unsafeContract = null;
 var donorAccount = null;
 var randomAccount = null;
+var upgradeAdmin = null;
 
+var project = null;
 var instance = null;
 var user = null;
 var token = null;
@@ -19,18 +23,22 @@ var encodedBuyCall = Web3EthAbi.encodeFunctionCall({
     inputs: []
 }, []);
 
-
 contract('VouchersRegistry', function(accounts) {
 	donorAccount = accounts[1];
 	randomAccount = accounts[2];
+	upgradeAdmin = accounts[3];
+	
+	beforeEach(async function () {
+		project = await TestHelper({ from: upgradeAdmin })
+	  });
 		
-	it("should be owned by deploying account", async() => {
-		instance = await VouchersRegistry.deployed();
-		let isOwner = await instance.isOwner.call();
-		assert.isTrue(isOwner, "deploying address wasn't owner");
+	it("should be admin'd by deploying account", async() => {
+		instance = await project.createProxy(VouchersRegistry, { initArgs: [accounts[0]] });
+		let isAdmin = await instance.isAdmin.call();
+		assert.isTrue(isAdmin, "deploying address wasn't admin");
 	});
 	
-	it("should let owner set contract status of accounts", async() => {
+	it("should let admin set contract status of accounts", async() => {
 		token = await BondingCurve.new();
 		safeContract = token.address;
 		
@@ -80,8 +88,7 @@ contract('VouchersRegistry', function(accounts) {
 	});
 
 	it("VoucherUser: should be owned by deploying account", async() => {
-		user = await VouchersUser.new(instance.address);
-
+		user = await project.createProxy(VouchersUser, { initArgs: [instance.address, accounts[0]] });
 		let isOwner = await user.isOwner.call();
 		assert.isTrue(isOwner, "deploying address wasn't owner");
 	});

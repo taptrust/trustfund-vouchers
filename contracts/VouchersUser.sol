@@ -1,16 +1,17 @@
 pragma solidity ^0.4.24;
 
-import './openzeppelin-solidity/contracts/ownership/Ownable.sol';
 import './openzeppelin-solidity/contracts/math/SafeMath.sol';
-import './relevant-community/contracts/BondingCurve.sol';
 import './VouchersRegistry.sol';
+import 'zos-lib/contracts/Initializable.sol';
 
-contract VouchersUser is Ownable{
+contract VouchersUser is Initializable{
 	VouchersRegistry _registry;
+	address _owner;
 
-	constructor(VouchersRegistry registry) public {
+	function initialize(VouchersRegistry registry, address owner) initializer public {
 		require(uint256(address(registry)) != 0);
 		_registry = registry;
+		_owner = owner;
 	}
 	
 	modifier onlyRegistry() {
@@ -20,6 +21,15 @@ contract VouchersUser is Ownable{
 
 	function isRegistry() public view returns(bool) {
 		return msg.sender == address(_registry);
+	}
+	
+	modifier onlyOwner() {
+		require(isOwner());
+		_;
+	}
+
+	function isOwner() public view returns(bool) {
+		return msg.sender == address(_owner);
 	}
 	
 	function requestContractVouchers(address contractAddress, address donorAddress, uint redeemAmount, bytes voucherFunctionData) public onlyOwner 

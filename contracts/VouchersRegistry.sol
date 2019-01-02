@@ -1,13 +1,15 @@
 pragma solidity ^0.4.24;
 
-import './openzeppelin-solidity/contracts/ownership/Ownable.sol';
 import './openzeppelin-solidity/contracts/math/SafeMath.sol';
 import './VouchersUser.sol';
+import 'zos-lib/contracts/Initializable.sol';
 
-contract VouchersRegistry is Ownable{
+contract VouchersRegistry is Initializable {
     
-    string constant SAFETY_CHECK_PASSED = "safetyCheckPassed";
-    string constant SAFETY_CHECK_FAILED = "safetyCheckFailed";
+    string SAFETY_CHECK_PASSED;
+    string SAFETY_CHECK_FAILED;
+	
+	address _admin;
     
     mapping(address => uint) public safetyCheckPassedContracts;
     mapping(address => uint) public safetyCheckFailedContracts;
@@ -18,9 +20,26 @@ contract VouchersRegistry is Ownable{
     mapping(bytes32 => bytes) public contractVouchersFunctionData;
     mapping(address => uint) public addressIdentityVerified;
     
-    uint redemptionGasFee = 1000000;
+    uint redemptionGasFee;
+	
+	function initialize(address admin) initializer public {
+		require(uint256(address(admin)) != 0);
+		redemptionGasFee = 1000000;
+		SAFETY_CHECK_PASSED = "safetyCheckPassed";
+		SAFETY_CHECK_FAILED = "safetyCheckFailed";
+		_admin = admin;
+	}
+	
+	modifier onlyAdmin() {
+		require(isAdmin());
+		_;
+	}
+	
+	function isAdmin() public view returns(bool) {
+		return msg.sender == address(_admin);
+	}
     
-    function setContractStatus(address contractAddress, string memory status, uint checkVersion) public onlyOwner {
+    function setContractStatus(address contractAddress, string memory status, uint checkVersion) public onlyAdmin {
         require(checkVersion > 0);
         
         if(stringsEquivelant(status, SAFETY_CHECK_PASSED))
@@ -29,7 +48,7 @@ contract VouchersRegistry is Ownable{
             SetSafetyCheckFailed(contractAddress,checkVersion);
     }
     
-    function SetSafetyCheckPassed(address contractAddress, uint checkVersion) internal{
+    function SetSafetyCheckPassed(address contractAddress, uint checkVersion) internal {
         safetyCheckPassedContracts[contractAddress] = checkVersion;
         if(safetyCheckFailedContracts[contractAddress] != 0)
             safetyCheckFailedContracts[contractAddress] = 0;
@@ -41,7 +60,7 @@ contract VouchersRegistry is Ownable{
             safetyCheckPassedContracts[contractAddress] = 0;
     }
 	
-	function setAddressIdentityVerified(address userAddress, uint verificationToken) public onlyOwner {
+	function setAddressIdentityVerified(address userAddress, uint verificationToken) public onlyAdmin {
 		addressIdentityVerified[userAddress] = verificationToken;
 	}
     
